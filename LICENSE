@@ -1,0 +1,26 @@
+﻿// Author: Tom Bongers
+// Email: tcjbongers@[the google thing]
+
+GNU AFFERO GENERAL PUBLIC LICENSE
+                       Version 3, 19 November 2007
+
+Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
+Everyone is permitted to copy and distribute verbatim copies
+of this license document, but changing it is not allowed.
+
+[Full AGPL v3 license text here. For brevity, see: https://www.gnu.org/licenses/agpl-3.0.txt]
+
+---
+
+## Commercial Licensing
+
+If you wish to use this software in a way not permitted by the AGPL (for example, in a closed-source or commercial product), commercial licenses are available. Please contact the author to discuss licensing terms:
+
+Author: Tom Bongers
+Email: tcjbongers@[the google thing]
+
+---
+
+## WireGuard Disclaimer
+
+This project is not affiliated with, endorsed by, or sponsored by the WireGuard project. WireGuard® is a registered trademark of Jason A. Donenfeld. This software does not include or distribute WireGuard itself, and all rights to WireGuard remain with their respective owners.

@@ -1,0 +1,13 @@
+bin/
+obj/
+/packages/
+riderModule.iml
+/_ReSharper.Caches/
+
+*.tmp
+
+# NuGet Packages
+*.nupkg
+
+#rider ignore files
+.idea
