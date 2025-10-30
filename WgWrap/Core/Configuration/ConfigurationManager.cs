@@ -17,6 +17,7 @@ internal class ConfigurationManager
     public string WgExe { get; private set; } = "";
     public string[] TrustedSsids { get; private set; } = Array.Empty<string>();
     public string[] TrustedIpRanges { get; private set; } = Array.Empty<string>();
+    public string[] ExcludedNetworkAdapters { get; private set; } = Array.Empty<string>();
     public bool TimerEnabled { get; private set; } = true;
     public int TimerIntervalSeconds { get; private set; } = 30;
     public bool AutoStartWithWindows { get; private set; } = false;
@@ -27,8 +28,24 @@ internal class ConfigurationManager
     {
         try
         {
+            var appDir = AppDomain.CurrentDomain.BaseDirectory;
+            var settingsPath = Path.Combine(appDir, "appsettings.json");
+            var exampleSettingsPath = Path.Combine(appDir, "appsettings.example.json");
+
+            // If appsettings.json doesn't exist, copy from example
+            if (!File.Exists(settingsPath) && File.Exists(exampleSettingsPath))
+            {
+                File.Copy(exampleSettingsPath, settingsPath, overwrite: false);
+            }
+
+            // If appsettings.json exists, check for missing settings and add defaults
+            if (File.Exists(settingsPath))
+            {
+                EnsureCompleteConfiguration(settingsPath, exampleSettingsPath);
+            }
+
             var builder = new ConfigurationBuilder()
-                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+                .SetBasePath(appDir)
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false);
 
             var configuration = builder.Build();
@@ -43,7 +60,6 @@ internal class ConfigurationManager
             }
             
             // Set up internal config paths
-            var appDir = AppDomain.CurrentDomain.BaseDirectory;
             var dataDir = Path.Combine(appDir, "data");
             Directory.CreateDirectory(dataDir); // Ensure data directory exists
             InternalConfigPath = Path.Combine(dataDir, $"{InternalTunnelName}.conf");
@@ -62,6 +78,12 @@ internal class ConfigurationManager
             if (ipRanges != null && ipRanges.Length > 0)
             {
                 TrustedIpRanges = ipRanges;
+            }
+
+            var excludedAdapters = configuration.GetSection("WireGuard:ExcludedNetworkAdapters").Get<string[]>();
+            if (excludedAdapters != null && excludedAdapters.Length > 0)
+            {
+                ExcludedNetworkAdapters = excludedAdapters;
             }
 
             // Load timer settings
@@ -162,6 +184,7 @@ internal class ConfigurationManager
                     WgExe = update.WgExe ?? WgExe,
                     TrustedSsids = update.TrustedSsids ?? TrustedSsids,
                     TrustedIpRanges = update.TrustedIpRanges ?? TrustedIpRanges,
+                    ExcludedNetworkAdapters = update.ExcludedNetworkAdapters ?? ExcludedNetworkAdapters,
                     TimerEnabled = update.TimerEnabled ?? TimerEnabled,
                     TimerIntervalSeconds = update.TimerIntervalSeconds ?? TimerIntervalSeconds,
                     AutoStartWithWindows = update.AutoStartWithWindows ?? AutoStartWithWindows,
@@ -181,6 +204,7 @@ internal class ConfigurationManager
             if (update.WgExe != null) WgExe = update.WgExe;
             if (update.TrustedSsids != null) TrustedSsids = update.TrustedSsids;
             if (update.TrustedIpRanges != null) TrustedIpRanges = update.TrustedIpRanges;
+            if (update.ExcludedNetworkAdapters != null) ExcludedNetworkAdapters = update.ExcludedNetworkAdapters;
             if (update.TimerEnabled != null) TimerEnabled = update.TimerEnabled.Value;
             if (update.TimerIntervalSeconds != null) TimerIntervalSeconds = update.TimerIntervalSeconds.Value;
             if (update.AutoStartWithWindows != null) AutoStartWithWindows = update.AutoStartWithWindows.Value;
@@ -277,6 +301,114 @@ internal class ConfigurationManager
     }
     
     /// <summary>
+    /// Ensures the configuration file has all required settings, adding defaults from example if missing
+    /// </summary>
+    private void EnsureCompleteConfiguration(string settingsPath, string exampleSettingsPath)
+    {
+        try
+        {
+            if (!File.Exists(exampleSettingsPath))
+                return;
+
+            // Load both configurations
+            var settingsJson = File.ReadAllText(settingsPath);
+            var exampleJson = File.ReadAllText(exampleSettingsPath);
+
+            var settingsDoc = System.Text.Json.JsonDocument.Parse(settingsJson);
+            var exampleDoc = System.Text.Json.JsonDocument.Parse(exampleJson);
+
+            // Check if WireGuard section exists
+            if (!settingsDoc.RootElement.TryGetProperty("WireGuard", out var settingsWireGuard))
+            {
+                // If no WireGuard section, copy the entire example
+                File.Copy(exampleSettingsPath, settingsPath, overwrite: true);
+                return;
+            }
+
+            var exampleWireGuard = exampleDoc.RootElement.GetProperty("WireGuard");
+
+            // Check each setting and add if missing
+            bool hasChanges = false;
+            var updatedSettings = settingsDoc.RootElement.Clone();
+
+            // Helper function to add missing property
+            void AddMissingProperty(string propertyName, System.Text.Json.JsonElement defaultValue)
+            {
+                if (!settingsWireGuard.TryGetProperty(propertyName, out _))
+                {
+                    // Property is missing, add it
+                    var newWireGuard = AddPropertyToObject(settingsWireGuard, propertyName, defaultValue);
+                    updatedSettings = ReplaceProperty(updatedSettings, "WireGuard", newWireGuard);
+                    hasChanges = true;
+                }
+            }
+
+            // Check each required property
+            if (exampleWireGuard.TryGetProperty("ConfigPath", out var configPath))
+                AddMissingProperty("ConfigPath", configPath);
+            if (exampleWireGuard.TryGetProperty("WgExe", out var wgExe))
+                AddMissingProperty("WgExe", wgExe);
+            if (exampleWireGuard.TryGetProperty("TrustedSsids", out var trustedSsids))
+                AddMissingProperty("TrustedSsids", trustedSsids);
+            if (exampleWireGuard.TryGetProperty("TrustedIpRanges", out var trustedIpRanges))
+                AddMissingProperty("TrustedIpRanges", trustedIpRanges);
+            if (exampleWireGuard.TryGetProperty("ExcludedNetworkAdapters", out var excludedAdapters))
+                AddMissingProperty("ExcludedNetworkAdapters", excludedAdapters);
+            if (exampleWireGuard.TryGetProperty("TimerEnabled", out var timerEnabled))
+                AddMissingProperty("TimerEnabled", timerEnabled);
+            if (exampleWireGuard.TryGetProperty("TimerIntervalSeconds", out var timerInterval))
+                AddMissingProperty("TimerIntervalSeconds", timerInterval);
+            if (exampleWireGuard.TryGetProperty("AutoStartWithWindows", out var autoStart))
+                AddMissingProperty("AutoStartWithWindows", autoStart);
+            if (exampleWireGuard.TryGetProperty("ShowShutdownWarning", out var showWarning))
+                AddMissingProperty("ShowShutdownWarning", showWarning);
+
+            // Save updated configuration if changes were made
+            if (hasChanges)
+            {
+                var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+                var updatedJson = System.Text.Json.JsonSerializer.Serialize(updatedSettings, options);
+                File.WriteAllText(settingsPath, updatedJson);
+            }
+        }
+        catch
+        {
+            // If anything fails, just continue with existing configuration
+        }
+    }
+
+    /// <summary>
+    /// Adds a property to a JSON object
+    /// </summary>
+    private System.Text.Json.JsonElement AddPropertyToObject(System.Text.Json.JsonElement obj, string propertyName, System.Text.Json.JsonElement value)
+    {
+        var dict = new Dictionary<string, System.Text.Json.JsonElement>();
+        foreach (var property in obj.EnumerateObject())
+        {
+            dict[property.Name] = property.Value;
+        }
+        dict[propertyName] = value;
+
+        var json = System.Text.Json.JsonSerializer.Serialize(dict);
+        return System.Text.Json.JsonDocument.Parse(json).RootElement;
+    }
+
+    /// <summary>
+    /// Replaces a property in a JSON object
+    /// </summary>
+    private System.Text.Json.JsonElement ReplaceProperty(System.Text.Json.JsonElement obj, string propertyName, System.Text.Json.JsonElement value)
+    {
+        var dict = new Dictionary<string, System.Text.Json.JsonElement>();
+        foreach (var property in obj.EnumerateObject())
+        {
+            dict[property.Name] = property.Name == propertyName ? value : property.Value;
+        }
+
+        var json = System.Text.Json.JsonSerializer.Serialize(dict);
+        return System.Text.Json.JsonDocument.Parse(json).RootElement;
+    }
+    
+    /// <summary>
     /// Helper class for building configuration updates
     /// </summary>
     private class ConfigUpdate
@@ -285,6 +417,7 @@ internal class ConfigurationManager
         public string? WgExe { get; set; }
         public string[]? TrustedSsids { get; set; }
         public string[]? TrustedIpRanges { get; set; }
+        public string[]? ExcludedNetworkAdapters { get; set; }
         public bool? TimerEnabled { get; set; }
         public int? TimerIntervalSeconds { get; set; }
         public bool? AutoStartWithWindows { get; set; }

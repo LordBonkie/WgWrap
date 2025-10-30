@@ -64,15 +64,18 @@ internal class NetworkManager
     }
 
     /// <summary>
-    /// Gets all local IPv4 addresses (excluding loopback)
+    /// Gets all local IPv4 addresses (excluding loopback and VPN adapters)
     /// </summary>
-    public string[] GetLocalIpAddresses()
+    public string[] GetLocalIpAddresses(string[] excludedNetworkAdapters)
     {
         _logger.Debug("Retrieving local IP addresses.");
         try
         {
             var addresses = NetworkInterface.GetAllNetworkInterfaces()
-                .Where(ni => ni.OperationalStatus == OperationalStatus.Up)
+                .Where(ni => ni.OperationalStatus == OperationalStatus.Up
+                          && ni.NetworkInterfaceType != NetworkInterfaceType.Tunnel
+                          && ni.NetworkInterfaceType != NetworkInterfaceType.Ppp
+                          && !excludedNetworkAdapters.Any(excluded => ni.Name.Contains(excluded, StringComparison.OrdinalIgnoreCase)))
                 .SelectMany(ni => ni.GetIPProperties().UnicastAddresses)
                 .Where(addr => addr.Address.AddressFamily == AddressFamily.InterNetwork 
                             && !IPAddress.IsLoopback(addr.Address))
@@ -92,14 +95,14 @@ internal class NetworkManager
     /// <summary>
     /// Checks if any local IP address matches the trusted IP ranges
     /// </summary>
-    public bool IsOnTrustedIpNetwork(string[] trustedIpRanges)
+    public bool IsOnTrustedIpNetwork(string[] trustedIpRanges, string[] excludedNetworkAdapters)
     {
         if (trustedIpRanges == null || trustedIpRanges.Length == 0)
         {
             return false;
         }
 
-        var localIps = GetLocalIpAddresses();
+        var localIps = GetLocalIpAddresses(excludedNetworkAdapters);
         if (localIps.Length == 0)
         {
             _logger.Debug("No local IP addresses found; not on trusted IP network.");
@@ -191,6 +194,31 @@ internal class NetworkManager
         {
             _logger.Error($"Error checking IP range '{ipAddress}' against '{cidrRange}'.", ex);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Gets all network adapter names on the machine (only operational adapters)
+    /// </summary>
+    public string[] GetNetworkAdapters()
+    {
+        _logger.Debug("Retrieving network adapter names.");
+        try
+        {
+            var adapters = NetworkInterface.GetAllNetworkInterfaces()
+                .Where(ni => ni.OperationalStatus == OperationalStatus.Up
+                          && ni.NetworkInterfaceType != NetworkInterfaceType.Tunnel
+                          && ni.NetworkInterfaceType != NetworkInterfaceType.Ppp)
+                .Select(ni => ni.Name)
+                .ToArray();
+
+            _logger.Info($"Found {adapters.Length} network adapter(s): {string.Join(", ", adapters)}");
+            return adapters;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("Exception during network adapter retrieval.", ex);
+            return Array.Empty<string>();
         }
     }
 }

@@ -49,6 +49,16 @@ if ($LASTEXITCODE -ne 0) {
 $publishDir = "$projectRoot\WgWrap\bin\Release\net9.0-windows\win-x64\publish"
 $tempDir = Join-Path $projectRoot "temp_publish"
 
+# Copy example settings to publish directory
+$exampleSettingsPath = "$projectRoot\WgWrap\appsettings.example.json"
+$publishExamplePath = Join-Path $publishDir "appsettings.example.json"
+if (Test-Path $exampleSettingsPath) {
+    Copy-Item $exampleSettingsPath $publishExamplePath -Force
+    Write-Host "Copied example settings to publish directory" -ForegroundColor Green
+} else {
+    Write-Warning "appsettings.example.json not found"
+}
+
 Write-Host "Creating portable ZIP package..." -ForegroundColor Green
 
 # Check if publish directory exists

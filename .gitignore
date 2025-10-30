@@ -11,3 +11,4 @@ riderModule.iml
 
 #rider ignore files
 .idea
+*.DotSettings.user

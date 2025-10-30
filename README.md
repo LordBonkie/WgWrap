@@ -1,6 +1,6 @@
 ﻿# WgWrap
 
-**Version: 0.2.0 beta**
+**Version: 0.3.0 beta**
 
 WireGuard auto-management tray application.
 
@@ -167,6 +167,10 @@ The application uses `appsettings.json` for configuration. Create or modify this
       "192.168.1.0/24",
       "10.0.0.0/8"
     ],
+    "ExcludedNetworkAdapters": [
+      "OpenVPN",
+      "WireGuard"
+    ],
     "TimerEnabled": true,
     "TimerIntervalSeconds": 30,
     "AutoStartWithWindows": false,
@@ -179,7 +183,8 @@ The application uses `appsettings.json` for configuration. Create or modify this
 - **ConfigPath**: Full path to your WireGuard configuration file (the tunnel name is automatically derived from the filename)
 - **WgExe**: Full path to the WireGuard executable (wireguard.exe)
 - **TrustedSsids**: Array of WiFi network names where VPN should be disabled
-- **TrustedIpRanges**: Array of IP ranges in CIDR notation (e.g., "192.168.1.0/24") where VPN should be disabled - useful for Ethernet connections on trusted networks
+- **TrustedIpRanges**: Array of IP ranges in CIDR notation (e.g., "192.168.1.0/24") where VPN should be disabled - useful for Ethernet connections on trusted networks. Note: Only physical network adapters are checked for IP matching, excluding VPN tunnels and any adapters with names containing the strings specified in ExcludedNetworkAdapters (default excludes 'OpenVPN' and 'WireGuard').
+- **ExcludedNetworkAdapters**: Array of strings to match against network adapter names. Adapters containing any of these strings are excluded from IP range checks. This uses **fuzzy matching** (case-insensitive substring search) rather than exact matching. For example, "OpenVPN" will match "OpenVPN TAP-Windows6", "My OpenVPN Adapter", etc.
 - **TimerEnabled**: Enable/disable automatic network checks (default: true)
 - **TimerIntervalSeconds**: Interval between automatic checks in seconds, 10-3600 (default: 30)
 - **AutoStartWithWindows**: Automatically start WgWrap when Windows boots (default: false) - managed via menu bar

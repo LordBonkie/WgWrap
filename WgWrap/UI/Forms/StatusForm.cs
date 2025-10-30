@@ -65,6 +65,7 @@ internal class StatusForm : Form
     private TextBox? _txtWgExe;
     private TextBox? _txtTrustedSsids;
     private TextBox? _txtTrustedIpRanges;
+    private TextBox? _txtExcludedNetworkAdapters;
     private CheckBox? _chkTimerEnabled;
     private TextBox? _txtTimerInterval;
     private Button? _btnBrowseConfig;
@@ -73,6 +74,8 @@ internal class StatusForm : Form
     private Label? _warningLabel;
     private System.Windows.Forms.Timer? _countdownTimer;
     private System.Windows.Forms.Timer? _statsRefreshTimer;
+    private ListBox? _lstAvailableAdapters;
+    private Button? _btnAddAdapter;
 
     public StatusForm(
         ConfigurationManager config,
@@ -117,7 +120,7 @@ internal class StatusForm : Form
 
     private void InitializeComponents()
     {
-        Text = "WireGuard";
+        Text = "WireGuard Wrapper status";
         Size = new Size(600, 540);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -643,6 +646,47 @@ internal class StatusForm : Form
         settingsPanel.Controls.Add(helpIpLabel);
         settY += 30;
 
+        // ===== ADAPTERS SECTION =====
+        // Excluded Network Adapters label and textbox
+        AddSettingsLabel(settingsPanel, "Excluded Adapters:", settY);
+        _txtExcludedNetworkAdapters = new TextBox
+        {
+            Location = new Point(150, settY),
+            Size = new Size(205, 80),
+            Multiline = true,
+            ScrollBars = ScrollBars.Vertical,
+            Text = string.Join(Environment.NewLine, _config.ExcludedNetworkAdapters)
+        };
+        _txtExcludedNetworkAdapters.TextChanged += (s, e) => LoadAvailableNetworkAdapters();
+        settingsPanel.Controls.Add(_txtExcludedNetworkAdapters);
+
+        // Available adapters list (right side of excluded adapters)
+        _lstAvailableAdapters = new ListBox
+        {
+            Location = new Point(375, settY),
+            Size = new Size(185, 80),
+            Font = new Font(Font.FontFamily, 9),
+            ForeColor = Color.FromArgb(64, 64, 64),
+            HorizontalScrollbar = true
+        };
+        settingsPanel.Controls.Add(_lstAvailableAdapters);
+        settY += 85;
+
+        // Add adapter button (below the available adapters list)
+        _btnAddAdapter = new Button
+        {
+            Text = "<< Add Selected",
+            Location = new Point(375, settY),
+            Size = new Size(185, 30),
+            FlatStyle = FlatStyle.System
+        };
+        _btnAddAdapter.Click += BtnAddAdapter_Click;
+        settingsPanel.Controls.Add(_btnAddAdapter);
+        settY += 40;
+
+        // Load available network adapters
+        LoadAvailableNetworkAdapters();
+
         // Timer enabled checkbox
         _chkTimerEnabled = new CheckBox
         {
@@ -680,6 +724,7 @@ internal class StatusForm : Form
         };
         settingsPanel.Controls.Add(intervalHelp);
         settY += 40;
+
 
 
         // Save button
@@ -770,6 +815,12 @@ internal class StatusForm : Form
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .ToArray();
 
+        var updatedExcludedAdapters = (_txtExcludedNetworkAdapters?.Text ?? "")
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .ToArray();
+
         // Validate timer interval
         bool timerEnabled = _chkTimerEnabled?.Checked ?? true;
         int timerInterval = 30;
@@ -789,7 +840,7 @@ internal class StatusForm : Form
             try
             {
                 SaveSettingsToFile(_config.OriginalConfigPath, _config.WgExe, 
-                    updatedSsids, updatedIpRanges, timerEnabled, timerInterval, _config.AutoStartWithWindows);
+                    updatedSsids, updatedIpRanges, updatedExcludedAdapters, timerEnabled, timerInterval, _config.AutoStartWithWindows);
                 
                 // Reload configuration and restart timer with new settings
                 Program.ReloadConfiguration();
@@ -800,6 +851,7 @@ internal class StatusForm : Form
                 // Update the UI
                 UpdateCountdownVisibility();
                 RefreshStatus();
+                LoadAvailableNetworkAdapters();
                 
                 MessageBox.Show("Settings saved and applied successfully!", 
                     "Settings Saved", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -827,7 +879,7 @@ internal class StatusForm : Form
         try
         {
             SaveSettingsToFile(_txtConfigPath.Text.Trim(), 
-                _txtWgExe.Text.Trim(), updatedSsids, updatedIpRanges, timerEnabled, timerInterval, _config.AutoStartWithWindows);
+                _txtWgExe.Text.Trim(), updatedSsids, updatedIpRanges, updatedExcludedAdapters, timerEnabled, timerInterval, _config.AutoStartWithWindows);
             
             // Reload configuration and restart timer with new settings
             Program.ReloadConfiguration();
@@ -849,7 +901,7 @@ internal class StatusForm : Form
     }
 
     private void SaveSettingsToFile(string configPath, string wgExe, 
-        string[] trustedSsids, string[] trustedIpRanges, bool timerEnabled, int timerIntervalSeconds, bool autoStartWithWindows)
+        string[] trustedSsids, string[] trustedIpRanges, string[] excludedNetworkAdapters, bool timerEnabled, int timerIntervalSeconds, bool autoStartWithWindows)
     {
         string appPath = AppDomain.CurrentDomain.BaseDirectory;
         string settingsPath = Path.Combine(appPath, "appsettings.json");
@@ -862,6 +914,7 @@ internal class StatusForm : Form
                 WgExe = wgExe,
                 TrustedSsids = trustedSsids,
                 TrustedIpRanges = trustedIpRanges,
+                ExcludedNetworkAdapters = excludedNetworkAdapters,
                 TimerEnabled = timerEnabled,
                 TimerIntervalSeconds = timerIntervalSeconds,
                 AutoStartWithWindows = autoStartWithWindows
@@ -1012,7 +1065,7 @@ internal class StatusForm : Form
         // Determine if on trusted network (same logic as tray icon)
         var ssid = _networkManager?.GetSsid() ?? "";
         bool isTrustedSsid = _config.TrustedSsids.Any(t => t.Equals(ssid, StringComparison.OrdinalIgnoreCase));
-        bool isTrustedIp = _networkManager?.IsOnTrustedIpNetwork(_config.TrustedIpRanges) ?? false;
+        bool isTrustedIp = _networkManager?.IsOnTrustedIpNetwork(_config.TrustedIpRanges, _config.ExcludedNetworkAdapters.Concat(new[] { _config.TunnelName }).ToArray()) ?? false;
         bool isOnTrustedNetwork = isTrustedSsid || isTrustedIp;
         
         // Get orb color using centralized logic
@@ -1039,7 +1092,7 @@ internal class StatusForm : Form
 
         // Check which trusted network rules match
         bool isTrustedSsid = _config.TrustedSsids.Contains(ssid, StringComparer.OrdinalIgnoreCase);
-        bool isTrustedIp = _networkManager.IsOnTrustedIpNetwork(_config.TrustedIpRanges);
+        bool isTrustedIp = _networkManager.IsOnTrustedIpNetwork(_config.TrustedIpRanges, _config.ExcludedNetworkAdapters.Concat(new[] { _config.TunnelName }).ToArray());
 
         _statusLabel.Text = status;
         _statusLabel.ForeColor = status == "Connected" ? Color.FromArgb(0, 180, 0) : Color.FromArgb(200, 0, 0);
@@ -1323,6 +1376,9 @@ internal class StatusForm : Form
         
         // Refresh the status display
         RefreshStatus();
+
+        // Load available network adapters
+        LoadAvailableNetworkAdapters();
     }
 
     /// <summary>
@@ -1676,5 +1732,68 @@ internal class StatusForm : Form
         }
         base.Dispose(disposing);
     }
-}
 
+    private void LoadAvailableNetworkAdapters()
+    {
+        // Get the list of available network adapters
+        var allAdapters = _networkManager.GetNetworkAdapters();
+
+        // Get current exclusions
+        var currentExclusions = (_txtExcludedNetworkAdapters?.Text ?? "")
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .ToArray();
+
+        // Automatically exclude the tunnel name (don't show it in the exclude list)
+        var automaticExclusions = new[] { _config.TunnelName };
+
+        // Combine manual exclusions with automatic exclusions
+        var allExclusions = currentExclusions.Concat(automaticExclusions).ToArray();
+
+        // Filter out adapters that contain any exclusion string (partial matching)
+        var availableAdapters = allAdapters
+            .Where(adapter => !allExclusions.Any(exclusion => 
+                adapter.Contains(exclusion, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+
+        // Clear existing items
+        if (_lstAvailableAdapters != null)
+        {
+            _lstAvailableAdapters.Items.Clear();
+
+            // Add each available adapter to the list box
+            foreach (var adapter in availableAdapters)
+            {
+                _lstAvailableAdapters.Items.Add(adapter);
+            }
+
+            // Select the first adapter by default if there are any
+            if (_lstAvailableAdapters.Items.Count > 0)
+            {
+                _lstAvailableAdapters.SelectedIndex = 0;
+            }
+        }
+    }
+
+    private void BtnAddAdapter_Click(object? sender, EventArgs e)
+    {
+        if (_lstAvailableAdapters == null || _txtExcludedNetworkAdapters == null) return;
+
+        // Get the selected adapter
+        var selectedAdapter = _lstAvailableAdapters.SelectedItem as string;
+        if (string.IsNullOrEmpty(selectedAdapter)) return;
+
+        // Add the adapter to the exclusions text box if not already present
+        var currentExclusions = _txtExcludedNetworkAdapters.Text
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim())
+            .ToList();
+
+        if (!currentExclusions.Contains(selectedAdapter, StringComparer.OrdinalIgnoreCase))
+        {
+            currentExclusions.Add(selectedAdapter);
+            _txtExcludedNetworkAdapters.Text = string.Join(Environment.NewLine, currentExclusions);
+        }
+    }
+}

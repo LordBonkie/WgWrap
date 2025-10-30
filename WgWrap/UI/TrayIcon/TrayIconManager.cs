@@ -171,7 +171,7 @@ internal class TrayIconManager : IDisposable
         var ssid = _networkManager.GetSsid();
         var status = _vpnManager.GetVpnStatus();
         bool isTrustedSsid = _config.TrustedSsids.Any(t => t.Equals(ssid, StringComparison.OrdinalIgnoreCase));
-        bool isTrustedIp = _networkManager.IsOnTrustedIpNetwork(_config.TrustedIpRanges);
+        bool isTrustedIp = _networkManager.IsOnTrustedIpNetwork(_config.TrustedIpRanges, _config.ExcludedNetworkAdapters);
         bool isOnTrustedNetwork = isTrustedSsid || isTrustedIp;
         
         string tooltip = $"SSID: {ssid}\nVPN: {status}";
@@ -272,4 +272,3 @@ internal class TrayIconManager : IDisposable
         }
     }
 }
-

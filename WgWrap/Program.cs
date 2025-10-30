@@ -1147,5 +1147,22 @@ internal static class Program
         _logger?.Info($"Periodic timer started ({_configManager.TimerIntervalSeconds}s interval).");
     }
 
-    public const string Version = "0.2.0";
+    public static string Version
+    {
+        get
+        {
+            try
+            {
+                // Read version from assembly (works both during development and after publishing)
+                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+                var version = assembly.GetName().Version;
+                return version?.ToString() ?? "x.x.x";
+            }
+            catch
+            {
+                // Fallback version
+                return "x.x.x";
+            }
+        }
+    }
 }

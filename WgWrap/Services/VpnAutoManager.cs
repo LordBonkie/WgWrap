@@ -46,7 +46,7 @@ internal class VpnAutoManager
         if (status != "Not Installed")
         {
             bool isTrustedSsid = _config.TrustedSsids.Contains(ssid, StringComparer.OrdinalIgnoreCase);
-            bool isTrustedIp = _networkManager.IsOnTrustedIpNetwork(_config.TrustedIpRanges);
+            bool isTrustedIp = _networkManager.IsOnTrustedIpNetwork(_config.TrustedIpRanges, _config.ExcludedNetworkAdapters);
             bool isTrusted = isTrustedSsid || isTrustedIp;
             
             _logger.Debug($"IsTrustedSsid={isTrustedSsid}, IsTrustedIp={isTrustedIp}, IsTrusted={isTrusted}. " +
